@@ -9,133 +9,180 @@ export default class AuthController extends Base {
   }
 
   //  SIGNUP API
-  async signup(req, res) {
+// SIGNUP API
+// SIGNUP API
+async signup(req, res) {
+  try {
+    const {
+      name,
+      email,
+      phone,
+      password,
+      role, // client | interpreter
+      address,
+      referral_code,
+      is_business,
+      business_name,
+      zip_code,
+      service_radius,
+      fee_min,
+      fee_max,
+      qualification,
+      experience_years,
+      languages,      // [{language_id:1, hourly_rate:50}]
+      gov_id,
+      latitude,
+      longitude
+    } = req.body;
+
+    // ----------- JSON FIELDS SAFE PARSING -------------
+    let service_type = [];
+    let assignment_type = [];
+
     try {
-      const {
+      service_type =
+        typeof req.body.service_type === "string"
+          ? JSON.parse(req.body.service_type)
+          : req.body.service_type || [];
+          console.log(service_type)
+
+      assignment_type =
+        typeof req.body.assignment_type === "string"
+          ? JSON.parse(req.body.assignment_type)
+          : req.body.assignment_type || [];
+    } catch (e) {
+      
+      return res.json({
+        s: 0,
+        m: "Invalid JSON format for service_type or assignment_type.",
+      });
+    }
+
+    // Validate required fields
+    if (this.varify_req(req, ["name", "email", "password", "role"])) {
+      this.s = 0;
+      this.m = "Missing required fields.";
+      return this.send_res(res);
+    }
+
+    // Duplicate check
+    const existingUser = await this.selectOne(
+      "SELECT id FROM users WHERE email = ? OR phone = ?",
+      [email, phone]
+    );
+
+    if (existingUser) {
+      this.s = 0;
+      this.m = "Email or phone already registered.";
+      return this.send_res(res);
+    }
+
+    const passwordHash = await this.generate_password(password);
+    const status = role === "interpreter" ? "pending" : "active";
+
+    // Insert User (UPDATED: latitude + longitude)
+    const userId = await this.insert(
+      `INSERT INTO users 
+        (role, name, email, phone, password_hash, address, 
+         business_name, is_business, referral_code, status, 
+         is_email_verified, is_phone_verified, latitude, longitude)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)`,
+      [
+        role,
         name,
         email,
         phone,
-        password,
-        role, // client | interpreter
-        address,
-        referral_code,
-        is_business,
-        business_name,
-        // interpreter fields
-        zip_code,
-        service_radius,
-        service_type,
-        assignment_type,
-        fee_range,
-        qualification,
-        experience_years,
-        languages,
-        gov_id,
-      } = req.body;
+        passwordHash,
+        address || null,
+        business_name || null,
+        is_business || 0,
+        referral_code || null,
+        status,
+        latitude || null,
+        longitude || null
+      ]
+    );
 
-      //  Validation
-      if (this.varify_req(req, ["name", "email", "password", "role"])) {
-        this.s = 0;
-        this.m = "Missing required fields.";
-        return this.send_res(res);
-      }
-
-      //  Check existing user
-      const existingUser = await this.selectOne(
-        "SELECT id FROM users WHERE email = ? OR phone = ?",
-        [email, phone]
-      );
-      if (existingUser) {
-        this.s = 0;
-        this.m = "Email or phone already registered.";
-        return this.send_res(res);
-      }
-
-      //   Encrypt password
-      const passwordHash = await this.generate_password(password);
-
-      //   Role-based status
-      const status = role === "interpreter" ? "pending" : "active";
-
-      //   Insert user
-      const userId = await this.insert(
-        `INSERT INTO users 
-         (role, name, email, phone, password_hash, address, 
-          business_name, is_business, referral_code, status, 
-          is_email_verified, is_phone_verified)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)`,
+    // Interpreter Profile Insert
+    if (role === "interpreter") {
+      await this.insert(
+        `INSERT INTO interpreter_profiles 
+          (user_id, zip_code, service_radius, fee_min, fee_max, 
+           qualification, experience_years, verified, gov_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`,
         [
-          role,
-          name,
-          email,
-          phone,
-          passwordHash,
-          address || null,
-          business_name || null,
-          is_business || false,
-          referral_code || null,
-          status,
+          userId,
+          zip_code || null,
+          service_radius || null,
+          fee_min || null,
+          fee_max || null,
+          qualification || null,
+          experience_years || null,
+          gov_id || null,
         ]
       );
 
-      //   If interpreter → insert into interpreter_profiles
-      if (role === "interpreter") {
-        await this.insert(
-          `INSERT INTO interpreter_profiles 
-           (user_id, zip_code, service_radius, service_type, assignment_type, fee_range,
-            qualification, experience_years, languages, verified, gov_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
-          [
-            userId,
-            zip_code || null,
-            service_radius || null,
-            JSON.stringify(service_type || []),
-            JSON.stringify(assignment_type || []),
-            fee_range || null,
-            qualification || null,
-            experience_years || null,
-            JSON.stringify(languages || []),
-            gov_id || null,
-          ]
-        );
+      // Service mapping
+      if (Array.isArray(service_type)) {
+        for (const id of service_type) {
+          await this.insert(
+            `INSERT INTO interpreter_services (interpreter_id, service_id)
+             VALUES (?, ?)`,
+            [userId, id]
+          );
+        }
       }
 
-      //   Generate OTP + tokens
-      const otp = Math.floor(100000 + Math.random() * 900000).toString();
-      const hashedOtp = await this.generateHash(otp);
-      const expires = new Date(Date.now() + 10 * 60 * 1000);
-      const apikey = await this.generate_apikey(userId);
-      const token = await this.generate_token(userId);
-
-      await this.insert(
-        `INSERT INTO user_auth (user_id, apikey, token, otp_token, otp_expires)
-         VALUES (?, ?, ?, ?, ?)`,
-        [userId, apikey, token, hashedOtp, expires]
-      );
-
-      //   Send OTP email
-      const mailService = new MailService();
-      await mailService.sendMail({
-        to: email,
-        subject: "Verify your email address",
-        templateName: "verify_email_otp",
-        data: { name, otp },
-      });
-
-      //  Response
-      this.s = 1;
-      this.m =
-        role === "interpreter"
-          ? "Signup successful. Please verify your email. Profile pending approval."
-          : "Signup successful. Please verify your email.";
-      this.r = { user_id: userId, role, status };
-      return this.send_res(res);
-    } catch (error) {
-      this.s = 0;
-      this.err = error.message;
-      return this.send_res(res);
+      // Assignment type mapping
+      if (Array.isArray(assignment_type)) {
+        for (const id of assignment_type) {
+          await this.insert(
+            `INSERT INTO interpreter_assignment_types 
+             (interpreter_id, assignment_type_id)
+             VALUES (?, ?)`,
+            [userId, id]
+          );
+        }
+      }
     }
+
+    // OTP + Auth
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const hashedOtp = await this.generateHash(otp);
+    const expires = new Date(Date.now() + 10 * 60 * 1000);
+
+    const apikey = await this.generate_apikey(userId);
+    const token = await this.generate_token(userId);
+
+    await this.insert(
+      `INSERT INTO user_auth (user_id, apikey, token, otp_token, otp_expires)
+       VALUES (?, ?, ?, ?, ?)`,
+      [userId, apikey, token, hashedOtp, expires]
+    );
+
+    // Send Email OTP
+    const mailService = new MailService();
+    await mailService.sendMail({
+      to: email,
+      subject: "Verify your email address",
+      templateName: "verify_email_otp",
+      data: { name, otp },
+    });
+
+    this.s = 1;
+    this.m = "Signup successful. Please verify your email.";
+    this.r = { user_id: userId, role, status };
+    return this.send_res(res);
+
+  } catch (error) {
+    this.s = 0;
+    this.err = error.message;
+    return this.send_res(res);
   }
+}
+
+
+
 
   //  VERIFY EMAIL API
   async verifyEmail(req, res) {
