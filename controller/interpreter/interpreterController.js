@@ -194,6 +194,7 @@ async searchInterpreters(req, res) {
 
 async hireDirect(req, res) {
   try {
+    // 1️⃣ Required fields
     const required = [
       "interpreter_id",
       "language_from",
@@ -202,13 +203,14 @@ async hireDirect(req, res) {
       "assignment_type_id",
       "date",
       "start_time",
-      "estimated_hours",
+      "estimated_hours"
     ];
 
     if (this.varify_req(req, required)) return this.send_res(res);
 
     const client_id = req._id;
 
+    // 2️⃣ Verify user is client
     const checkClient = await this.selectOne(
       "SELECT role FROM users WHERE id = ?",
       [client_id]
@@ -220,6 +222,7 @@ async hireDirect(req, res) {
       return this.send_res(res);
     }
 
+    // Extract body
     const {
       interpreter_id,
       title,
@@ -237,7 +240,7 @@ async hireDirect(req, res) {
       lng
     } = req.body;
 
-    // Check interpreter exists
+    // 3️⃣ Check interpreter exists
     const interpreter = await this.selectOne(
       "SELECT id FROM users WHERE id = ? AND role='interpreter'",
       [interpreter_id]
@@ -249,33 +252,107 @@ async hireDirect(req, res) {
       return this.send_res(res);
     }
 
-    // 🔥 Get rate from interpreter_languages based on language_from
-    const langRate = await this.selectOne(
-      `SELECT hourly_rate 
-       FROM interpreter_languages 
-       WHERE interpreter_id = ? AND language_id = ?`,
-      [interpreter_id, language_from]
+    // 4️⃣ Auto-calc end_time if not sent
+    let final_end_time = end_time;
+    if (!final_end_time) {
+      const start = new Date(`${date} ${start_time}`);
+      start.setHours(start.getHours() + Number(estimated_hours));
+      final_end_time = start.toISOString().substring(11, 19); // HH:MM:SS
+    }
+
+    // 5️⃣ CHECK AVAILABILITY (FULL DAY + SLOT + ASSIGNMENT)
+    const unavailable = await this.selectOne(
+      `
+      SELECT id FROM interpreter_unavailability
+      WHERE interpreter_id = ?
+        AND date = ?
+        AND (
+              is_full_day = 1
+           OR (
+                is_full_day = 0
+                AND (
+                      (start_time <= ? AND end_time >= ?)
+                   OR (start_time <= ? AND end_time >= ?)
+                   OR (start_time >= ? AND end_time <= ?)
+                )
+           )
+        )
+      `,
+      [
+        interpreter_id, date,
+        start_time, start_time,
+        final_end_time, final_end_time,
+        start_time, final_end_time
+      ]
     );
 
-    if (!langRate) {
+    if (unavailable) {
       this.s = 0;
-      this.m = "Interpreter does not provide service for selected language";
+      this.m = "Interpreter is unavailable on this date/time";
       return this.send_res(res);
     }
 
-    const price_per_hour = langRate.hourly_rate;
+    // 6️⃣ Check if interpreter already booked in another assignment
+    const booked = await this.selectOne(
+      `
+      SELECT id FROM assignments
+      WHERE interpreter_id = ?
+        AND date = ?
+        AND status IN ('assigned','in_route','started')
+        AND (
+              (start_time <= ? AND end_time >= ?)
+           OR (start_time <= ? AND end_time >= ?)
+           OR (start_time >= ? AND end_time <= ?)
+        )
+      `,
+      [
+        interpreter_id, date,
+        start_time, start_time,
+        final_end_time, final_end_time,
+        start_time, final_end_time
+      ]
+    );
 
-    // Begin Transaction
+    if (booked) {
+      this.s = 0;
+      this.m = "Interpreter is already booked in another assignment";
+      return this.send_res(res);
+    }
+
+    // 7️⃣ Get Hourly Rate (Based on Selected Language)
+    const rate = await this.selectOne(
+      `
+      SELECT hourly_rate 
+      FROM interpreter_languages 
+      WHERE interpreter_id = ? AND language_id = ?
+      `,
+      [interpreter_id, language_from]
+    );
+
+    if (!rate) {
+      this.s = 0;
+      this.m = "Interpreter does not support selected language";
+      return this.send_res(res);
+    }
+
+    const price_per_hour = rate.hourly_rate;
+
+    // 8️⃣ Start transaction
     await this.begin_transaction();
 
-    // ➤ Create assignment
+    // 9️⃣ Create Assignment
     const assignmentId = await this.insert(
-      `INSERT INTO assignments (
+      `
+      INSERT INTO assignments (
         client_id, interpreter_id, title, description,
-        language_from, language_to, service_id, assignment_type_id,
-        date, start_time, end_time, estimated_hours,
-        location, lat, lng, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'requested')`,
+        language_from, language_to,
+        service_id, assignment_type_id,
+        date, start_time, end_time,
+        estimated_hours, location, lat, lng,
+        status
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'requested')
+      `,
       [
         client_id,
         interpreter_id,
@@ -287,7 +364,7 @@ async hireDirect(req, res) {
         assignment_type_id,
         date,
         start_time,
-        end_time || null,
+        final_end_time,
         estimated_hours,
         location || null,
         lat || null,
@@ -295,19 +372,26 @@ async hireDirect(req, res) {
       ]
     );
 
-    // ➤ Create hire_request
+    // 🔟 Create Hire Request
     await this.insert(
-      `INSERT INTO hire_requests
+      `
+      INSERT INTO hire_requests
       (assignment_id, client_id, interpreter_id, price_per_hour, status)
-      VALUES (?, ?, ?, ?, 'pending')`,
+      VALUES (?, ?, ?, ?, 'pending')
+      `,
       [assignmentId, client_id, interpreter_id, price_per_hour]
     );
 
+    // Commit transaction
     await this.commit();
 
     this.s = 1;
-    this.m = "Hire request sent to interpreter";
-    this.r = { assignment_id: assignmentId, price_per_hour };
+    this.m = "Hire request sent successfully";
+    this.r = {
+      assignment_id: assignmentId,
+      price_per_hour,
+      interpreter_id
+    };
 
     return this.send_res(res);
 
@@ -318,6 +402,7 @@ async hireDirect(req, res) {
     return this.send_res(res);
   }
 }
+
 
 async acceptHire(req, res) {
   try {

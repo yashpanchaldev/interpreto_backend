@@ -267,6 +267,35 @@ async allowLocation(req, res) {
     return this.send_res(res);
   }
 }
+async referralHistory(req, res) {
+  try {
+    const user_id = req._id;
+
+    const rows = await this.select(
+      `SELECT 
+          r.id,
+          u.name,
+          r.status,
+          DATE_FORMAT(r.created_at, '%d/%m/%Y') AS date
+       FROM referrals r
+       LEFT JOIN users u ON u.id = r.referred_id
+       WHERE r.referrer_id = ?
+       ORDER BY r.id DESC`,
+      [user_id]
+    );
+
+    this.s = 1;
+    this.m = "Referral history";
+    this.r = rows;
+    return this.send_res(res);
+
+  } catch (err) {
+    this.s = 0;
+    this.err = err.message;
+    return this.send_res(res);
+  }
+}
+
 
 
 }

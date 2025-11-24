@@ -14,6 +14,10 @@ router.route("/allow-location").put((req, res, next) => {
   const c = new Auth();
   return c.allowLocation(req, res, next);
 });
+router.route("/referrals/history").get((req, res, next) => {
+  const c = new Auth();
+  return c.referralHistory(req, res, next);
+});
 
 
 

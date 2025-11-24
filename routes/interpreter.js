@@ -1,5 +1,6 @@
 import { Router } from "express";
 import interpreterController from "../controller/interpreter/interpreterController.js";
+import UnavailabilityController from "../controller/interpreter/unavailabilityController.js";
 
 const router = Router();
 
@@ -27,6 +28,21 @@ router.route("/myRequests").get((req, res, next) => {
   const c = new interpreterController();
   return c.getMyAllRequests(req, res, next);
 });
+router.route("/unavailability/add").post((req, res, next) => {
+  const c = new UnavailabilityController();
+  return c.addUnavailability(req, res, next);
+});
+
+router.route("/unavailability").get((req, res, next) => {
+  const c = new UnavailabilityController();
+  return c.getUnavailability(req, res, next);
+});
+router.route("/unavailability/delete/:id").delete((req, res, next) => {
+  const c = new UnavailabilityController();
+  return c.deleteUnavailability(req, res, next);
+});
+
+
 
 
 
