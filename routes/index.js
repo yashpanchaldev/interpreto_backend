@@ -7,6 +7,7 @@ import Agreement from "./agreements.js";
 import ratereview from "./rateReview.js";
 import assignment from "./assignment.js";
 import interpreter from "./interpreter.js";
+import chat from "./chat.js";
 import admin from "./admin.js";
 import User from "./user.js";
 
@@ -25,6 +26,7 @@ router.use("/interpreter",Agreement)
 router.use("/assignment",assignment)
 router.use("/interpreter",interpreter)
 router.use("/admin",admin)
+router.use("/chats",chat)
 
 
 export default router;

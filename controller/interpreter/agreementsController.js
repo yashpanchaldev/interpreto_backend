@@ -14,6 +14,7 @@ export default class AgreementController extends Base {
     try {
       const admin_id = req._id;
       const { title, type, content } = req.body;
+      console.log(req.body)
       
       const user = await this.selectOne("SELECT role FROM users WHERE id = ?", [admin_id]);
       if (!user || user.role !== "admin") {

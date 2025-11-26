@@ -5,9 +5,7 @@ export default class UnavailabilityController extends Base {
     super();
   }
 
-  // -------------------------------
   //  ADD UNAVAILABILITY
-  // -------------------------------
   async addUnavailability(req, res) {
     try {
       const interpreter_id = req._id;
@@ -26,9 +24,7 @@ export default class UnavailabilityController extends Base {
         return this.send_res(res);
       }
 
-      // ---------------------
       // MAKE DATE RANGE
-      // ---------------------
       const start = new Date(from_date);
       const end = new Date(to_date);
 
@@ -46,9 +42,7 @@ export default class UnavailabilityController extends Base {
       for (const d of dates) {
         const isFullDay = full_day_dates.includes(d);
 
-        // --------------------------------------
         // 1️⃣ CHECK IF FULL DAY ALREADY EXISTS
-        // --------------------------------------
         const fullDayExists = await this.selectOne(
           `SELECT id FROM interpreter_unavailability 
            WHERE interpreter_id=? AND date=? AND is_full_day=1`,
@@ -60,9 +54,7 @@ export default class UnavailabilityController extends Base {
           continue;
         }
 
-        // --------------------------------------
         // 2️⃣ IF ADDING FULL DAY
-        // --------------------------------------
         if (isFullDay) {
           // remove all partial slots first
           await this.delete(
@@ -82,9 +74,7 @@ export default class UnavailabilityController extends Base {
           continue;
         }
 
-        // --------------------------------------
         // 3️⃣ IF FULL DAY DOES NOT EXIST → ADD TIME SLOTS
-        // --------------------------------------
         for (const s of slots) {
           if (!s.start_time || !s.end_time) continue;
 
@@ -137,9 +127,7 @@ export default class UnavailabilityController extends Base {
     }
   }
 
-  // -------------------------------
   //  GET UNAVAILABILITY
-  // -------------------------------
   async getUnavailability(req, res) {
     try {
       const interpreter_id = req._id;
@@ -163,9 +151,7 @@ export default class UnavailabilityController extends Base {
     }
   }
 
-  // -------------------------------
   //  DELETE UNAVAILABILITY
-  // -------------------------------
   async deleteUnavailability(req, res) {
     try {
       const interpreter_id = req._id;

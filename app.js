@@ -4,9 +4,23 @@ import path from "path";
 import fileUpload from "express-fileupload";
 import { CONFIG } from "./config/flavour.js";
 import { POOL } from "./config/database.js";
+import {Server} from "socket.io"
+import http from "http"
+import { registerSocketHandlers } from "./sockets/chat.socket.js"; // 👈 import socket file
+
 
 // Create Server
-const server = express();
+const app = express();
+const server = http.createServer(app)
+
+const io = new Server(server,{
+  cors:{
+    origin:"*",
+    methods:["Get","Post"]
+  }
+})
+
+app.set('io',io)
 
 // Check DB Connection
 POOL.getConnection((errr) => {
@@ -18,30 +32,30 @@ POOL.getConnection((errr) => {
 });
 
 // Parse JSON request bodies
-server.use(express.json());
+app.use(express.json());
 
 // Parse URL-encoded request bodies
-server.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true }));
 
 // Configure express-fileupload middleware for handling file uploads
-server.use(fileUpload({ createParentPath: true }));
+app.use(fileUpload({ createParentPath: true }));
 
 // Configure CORS middleware
-server.use(
+app.use(
   cors({
     origin: "*",
     methods: ["GET", "POST", "DELETE", "UPDATE", "PUT", "PATCH"],
   })
 );
 
-server.use(cors());
+app.use(cors());
 
 // Serve static files from the "public" directory
-server.use(express.static(path.join(path.resolve(), "public")));
+app.use(express.static(path.join(path.resolve(), "public")));
 
 // Routes
 import router from "./routes/index.js";
-server.use("/api", router);
+app.use("/api", router);
 
 // Catch-all route handler for non-existent routes
 // const __filename = fileURLToPath(import.meta.url);
@@ -56,7 +70,7 @@ server.use("/api", router);
 //   }
 // });
 
-server.use((req, res) => {
+app.use((req, res) => {
   const fullPath = req.originalUrl;
   if (fullPath.startsWith(`/${CONFIG.STATIC_ROUTE}`)) {
     res.sendFile("index.html", {
@@ -69,8 +83,9 @@ server.use((req, res) => {
 
 // Error Handler Middleware
 import { errorHandler } from "./middleware/error.js";
-server.use(errorHandler);
+app.use(errorHandler);
 
+registerSocketHandlers(io)
 // SERVER START
 server.listen(CONFIG.PORT, () => {
   console.log("Server is start on port", CONFIG.PORT);

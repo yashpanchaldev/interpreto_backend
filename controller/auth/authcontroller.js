@@ -119,6 +119,8 @@ export default class AuthController extends Base {
         userId,
       ]);
 
+      
+
       // Interpreter Extra Tables
       if (role === "interpreter") {
         // Insert profile
