@@ -15,6 +15,10 @@ const CONFIG = {
     CLOUDINARY_API_KEY: process.env[`${PREFIX}_CLOUDINARY_API_KEY`],
     CLOUDINARY_API_SECRET: process.env[`${PREFIX}_CLOUDINARY_API_SECRET`],
 
+STRIPE_SECRET_KEY: process.env[`${PREFIX}_STRIPE_SECRET_KEY`],
+  STRIPE_WEBHOOK_SECRET: process.env[`${PREFIX}_STRIPE_WEBHOOK_SECRET`], // Starts with whsec_
+  FRONTEND_URL: process.env[`${PREFIX}_FRONTEND_URL`], // e.g. http://localhost:5173
+
   // SMTP Configuration
   SMTP_HOST: process.env[`${PREFIX}_SMTP_HOST`],
   SMTP_PORT: parseInt(process.env[`${PREFIX}_SMTP_PORT`] || "465", 10),

@@ -4,43 +4,44 @@ import path from "path";
 import fileUpload from "express-fileupload";
 import { CONFIG } from "./config/flavour.js";
 import { POOL } from "./config/database.js";
-import {Server} from "socket.io"
-import http from "http"
-import { registerSocketHandlers } from "./sockets/chat.socket.js"; // 👈 import socket file
-
-
+import { Server } from "socket.io";
+import http from "http";
+import { registerSocketHandlers } from "./sockets/chat.socket.js";
+import expressRaw from "express";
 // Create Server
 const app = express();
-const server = http.createServer(app)
+const server = http.createServer(app);
 
-const io = new Server(server,{
-  cors:{
-    origin:"*",
-    methods:["Get","Post"]
-  }
-})
-
-app.set('io',io)
-
-// Check DB Connection
-POOL.getConnection((errr) => {
-  if (errr) {
-    console.log("DB Error" + errr);
-  } else {
-    console.log("DB Connected Successfully");
-  }
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"],
+  },
 });
 
-// Parse JSON request bodies
-app.use(express.json());
+app.set("io", io);
 
-// Parse URL-encoded request bodies
+// ✔ DB CONNECTION
+POOL.getConnection((err) => {
+  if (err) console.log("DB Error" + err);
+  else console.log("DB Connected Successfully");
+});
+
+
+
+app.use(
+  "/api/payment/webhook",
+  expressRaw.raw({ type: "application/json" })   // ← IMPORTANT
+);
+
+// ✔ NORMAL JSON PARSER (after webhook raw)
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Configure express-fileupload middleware for handling file uploads
+// ✔ FILE UPLOAD
 app.use(fileUpload({ createParentPath: true }));
 
-// Configure CORS middleware
+// ✔ CORS
 app.use(
   cors({
     origin: "*",
@@ -48,28 +49,14 @@ app.use(
   })
 );
 
-app.use(cors());
-
-// Serve static files from the "public" directory
+// ✔ STATIC FILES
 app.use(express.static(path.join(path.resolve(), "public")));
 
-// Routes
+// ✔ ROUTING
 import router from "./routes/index.js";
 app.use("/api", router);
 
-// Catch-all route handler for non-existent routes
-// const __filename = fileURLToPath(import.meta.url);
-// const __dirname = path.dirname(__filename);
-// server.use((req, res) => {
-//   if ((req.baseUrl + req.path).includes(`${CONFIG.STATIC_ROUTE}`)) {
-//     res.sendFile("index.html", {
-//       root: path.join(__dirname, `public/${CONFIG.STATIC_ROUTE}/`),
-//     });
-//   } else {
-//     return res.status(404).json({ s: 0, m: "Page not found" });
-//   }
-// });
-
+// ✔ FALLBACK (404 handler for frontend routes)
 app.use((req, res) => {
   const fullPath = req.originalUrl;
   if (fullPath.startsWith(`/${CONFIG.STATIC_ROUTE}`)) {
@@ -81,12 +68,12 @@ app.use((req, res) => {
   }
 });
 
-// Error Handler Middleware
+// ✔ ERROR HANDLER
 import { errorHandler } from "./middleware/error.js";
 app.use(errorHandler);
-
-registerSocketHandlers(io)
-// SERVER START
+// ✔ SOCKET INIT
+registerSocketHandlers(io);
+// ✔ START SERVER
 server.listen(CONFIG.PORT, () => {
   console.log("Server is start on port", CONFIG.PORT);
 });

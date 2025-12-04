@@ -2,6 +2,7 @@ import axios from "axios";
 import "../../routes/auth.js";
 import { Base } from "../../service/base.js";
 import MailService from "../../service/mail.js";
+import { stripe } from "../../config/stripe.js";
 
 export default class AuthController extends Base {
   constructor() {
@@ -11,6 +12,9 @@ export default class AuthController extends Base {
   //  SIGNUP API
   // SIGNUP API
   // SIGNUP API
+
+
+
   async signup(req, res) {
     try {
       const {
@@ -119,7 +123,39 @@ export default class AuthController extends Base {
         userId,
       ]);
 
-      
+     // during signup after creating user record
+
+     let createdStripeAccountId = null
+if (role === "interpreter") {
+  try {
+    // Create stripe express account
+    const stripeAccount = await stripe.accounts.create({
+      type: "express",
+      email: email,
+      metadata: { local_user_id: userId.toString() }
+    });
+
+    createdStripeAccountId = stripeAccount.id;
+
+    // Persist stripe_account_id + onboarding status
+    await this.update(
+      `UPDATE users SET stripe_account_id = ?, stripe_onboarding_status = 'pending' WHERE id = ?`,
+      [createdStripeAccountId, userId]
+    );
+
+    await this.insert(
+      `INSERT INTO stripe_account_logs (user_id, stripe_account_id, event, created_at) VALUES (?, ?, 'created', NOW())`,
+      [userId, createdStripeAccountId]
+    );
+  } catch (err) {
+    await this.rollback();
+    this.s = 0;
+    this.m = "Stripe account creation failed";
+    this.err = err.message;
+    return this.send_res(res);
+  }
+}
+
 
       // Interpreter Extra Tables
       if (role === "interpreter") {

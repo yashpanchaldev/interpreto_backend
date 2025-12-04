@@ -26,6 +26,11 @@ router.route("/reset-password").post((req, res, next) => {
   const c = new Auth();
   return c.resetPassword(req, res, next);
 });
+router.route("/createStripeAccount").post((req, res, next) => {
+  const c = new Auth();
+  return c.createStripe(req, res, next);
+});
+
 
 
 

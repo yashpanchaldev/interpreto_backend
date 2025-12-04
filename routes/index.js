@@ -9,6 +9,7 @@ import assignment from "./assignment.js";
 import interpreter from "./interpreter.js";
 import chat from "./chat.js";
 import admin from "./admin.js";
+import stripe from "./stripe.js";
 import User from "./user.js";
 
 const router = Router();
@@ -27,6 +28,8 @@ router.use("/assignment",assignment)
 router.use("/interpreter",interpreter)
 router.use("/admin",admin)
 router.use("/chats",chat)
+router.use("/payment",stripe)
+
 
 
 export default router;

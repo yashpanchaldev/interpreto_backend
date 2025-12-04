@@ -11,6 +11,7 @@ export const registerSocketHandlers = (io) => {
         if (!userId) return;
         await POOL.query("UPDATE users SET socket_id = ? WHERE id = ?", [socket.id, userId]);
 
+        var a =0;
         // fetch all chats of this user and join rooms
         const [chats] = await POOL.query(
           `SELECT id FROM chats WHERE user_one_id = ? OR user_two_id = ?`,
@@ -26,7 +27,6 @@ export const registerSocketHandlers = (io) => {
         console.error("Login/socket join error:", err);
       }
     });
-
     // SEND MESSAGE
     socket.on("send-message", async ({ sender_id, chat_id, message, media = null, thumb = null }) => {
       try {
@@ -87,10 +87,9 @@ export const registerSocketHandlers = (io) => {
     });
 
     // MESSAGE READ - update last_read_msg_id and emit read notification
-    socket.on("message-read", async ({ userId, chat_id, last_read_msg_id }) => {
+      socket.on("message-read", async ({ userId, chat_id, last_read_msg_id }) => {
       try {
         if (!userId || !chat_id) return;
-
         // upsert chat_message_read
         const [existing] = await POOL.query(`SELECT id FROM chat_message_read WHERE chat_id = ? AND user_id = ?`, [chat_id, userId]);
         if (existing.length > 0) {
@@ -116,23 +115,6 @@ export const registerSocketHandlers = (io) => {
         console.error("message-read handler error:", err);
       }
     });
-
-
-
-    socket.on("request-delete-message", async ({ userId, message_id }) => {
-      try {
-        if (!userId || !message_id) return;
-        // fetch message to get chat_id
-        const [msgRows] = await POOL.query(`SELECT id, chat_id FROM chat_message WHERE id = ?`, [message_id]);
-        if (msgRows.length === 0) return;
-        const chat_id = msgRows[0].chat_id;
-        // emit an event so clients hide it for this user
-        io.to(`chat_${chat_id}`).emit("delete-chat-message", { message_id, user_id: userId });
-      } catch (err) {
-        console.error("request-delete-message error:", err);
-      }
-    });
-
     socket.on("disconnect", async () => {
       console.log("User disconnected:", socket.id);
       try {

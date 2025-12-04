@@ -15,7 +15,7 @@ export default class AgreementController extends Base {
       const admin_id = req._id;
       const { title, type, content } = req.body;
       console.log(req.body)
-      
+
       const user = await this.selectOne("SELECT role FROM users WHERE id = ?", [admin_id]);
       if (!user || user.role !== "admin") {
         this.s = 0;
@@ -48,7 +48,7 @@ export default class AgreementController extends Base {
   }
 
 
-  // ============================================================
+  //* ============================================================
   // ADMIN: UPDATE AGREEMENT
   // ============================================================
   async updateAgreement(req, res) {
